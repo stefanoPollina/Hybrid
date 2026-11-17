@@ -1199,7 +1199,7 @@ function rowLib(){return `<div class="row">
   <div class="rowc"><div class="lw" style="width:46%">${sel('lb','target bank')}TARGET BANK</div><div class="lw" style="width:46%">${sel('le','target engine')}TARGET ENGINE</div></div>
   <div class="rowc"><button type="button" class="pb acc" data-act="libLoad">▶ LOAD</button><button type="button" class="pb" data-act="libCapture">+ CAPTURE</button><button type="button" class="pb" data-act="libDelete">DELETE</button></div>
   <div class="rowc"><button type="button" class="pb" data-act="libExport">↓ EXPORT</button><button type="button" class="pb" data-act="libImport">↑ IMPORT</button></div>
-  <div class="lcd multi" id="libInfo" style="height:30px;--lcdc:#7ec8ff;font-size:8.5px"></div>`,{id:'modLibrary',sub:'58 ENGINE PATCHES · SAVES IN BROWSER'})}
+  <div class="lcd multi" id="libInfo" style="height:76px;overflow-y:auto;--lcdc:#7ec8ff;font-size:8.5px;white-space:normal"></div>`,{id:'modLibrary',sub:FACT_ENG.length+' ENGINE PATCHES · SAVES IN BROWSER'})}
  ${mod(26,'black','FACTORY',`<div class="lcd list" id="facList" style="height:168px;--lcdc:#7dffa1"></div><div class="lcd multi" id="facInfo" style="height:52px;--lcdc:#7dffa1;font-size:8.5px"></div>
   <div class="rowc"><div class="lw" style="width:84px">${sel('fm','performance mode')}MODE</div><button type="button" class="pb acc" data-act="facPlay">▶ LOAD &amp; PLAY</button><button type="button" class="pb" data-act="facStop">■ STOP</button><button type="button" class="pb" data-act="facExport">↓ JSON</button></div>`,{id:'modFactory',sub:'32 STARTING POINTS · 8 FAMILIES'})}
  ${mod(14,'maroon','MUTATOR',`<div class="lw" style="width:100%">${sel('dm','discovery mode')}DISCOVERY</div>${knob('n:novelty','l','yellow','NOVELTY')}
@@ -1415,11 +1415,14 @@ const validP17=x=>x&&typeof x.name==='string'&&x.name.length<=100&&Number.isInte
 try{const raw=JSON.parse(localStorage.getItem(P17KEY)||'[]');if(Array.isArray(raw))ui.saved=raw.filter(validP17).slice(0,128)}catch{}
 function storeLib(){try{localStorage.setItem(P17KEY,JSON.stringify(ui.saved))}catch{say('BROWSER STORAGE UNAVAILABLE · EXPORT JSON TO KEEP PATCHES')}}
 const libSelected=()=>ui.libChosen.source==='factory'?p17Initial(ui.libChosen.index):ui.saved[ui.libChosen.index];
+function atlasInfo(p){const e={...freshEdit(),...p.edit},W={sine:'SINE',triangle:'TRI',sawtooth:'SAW',square:'SQUARE'},hz=Math.round(Math.min(19000,Math.max(35,35*Math.pow(500,e.cutoff/100))));
+ const src=e.wtEnabled==='on'?(e.wtTable&&SELLBL[e.wtTable]&&window.MOSAIC_WT_BANK?'TABLE '+e.wtTable+' '+(window.MOSAIC_WT_BANK.tables.find(t=>t.id===e.wtTable)||{}).name+(e.wtSweep?' · SWEEP '+e.wtSweep:''):'8-PARTIAL WAVETABLE'):'OSC '+W[e.wave1]+(e.mix>0?' + '+W[e.wave2]+' ('+e.mix+'%)':'');
+ return `<b>${esc(p.name.toUpperCase())}</b><br>${p.group?esc(p.group.toUpperCase())+'<br>':''}ENGINE ${esc(TYPES[p.type].toUpperCase())}<br>${esc(src.toUpperCase())}<br>FILTER ${SELLBL[e.filter]} ${hz>=1000?(hz/1000).toFixed(1)+'K':hz} HZ · RES ${e.resonance} · ENV ${e.envDepth} · ADSR ${e.attack}/${e.decay}/${e.sustain}/${e.release}`}
 function renderLib(){const list=$('libList');if(!list)return;const top=list.scrollTop;
  let grp='',h='';const item=(x)=>`<button type="button" class="it ${ui.libChosen.source===x.source&&ui.libChosen.index===x.index?'on':''}" data-act="libPick" data-arg="${x.source}:${x.index}" title="${esc(x.name)}">${x.source==='factory'?'◇':'●'} ${esc(x.name)}</button>`;
  if(ui.saved.length){h+='<div class="grp">YOUR SAVED PATCHES</div>'+ui.saved.map((p,i)=>item({name:p.name,source:'saved',index:i})).join('')}
  FACT_ENG.forEach((p,i)=>{if(p.group!==grp){grp=p.group;h+=`<div class="grp">${esc(grp.toUpperCase())}</div>`}h+=item({name:p.name,source:'factory',index:i})});list.innerHTML=h;list.scrollTop=top;
- const p=libSelected();$('libInfo').innerHTML=p?`${esc(p.name.toUpperCase())}<br>${p.group?esc(p.group.toUpperCase())+' · ':''}${SHORT[p.type]} · ${p.edit.wtEnabled==='on'?(p.edit.wtTable&&SELLBL[p.edit.wtTable]?'TABLE '+p.edit.wtTable:'8-PARTIAL WAVETABLE'):'STD OSCILLATORS'} · ${Object.keys(p.edit).length} PARAMS`:'—';syncSelKey('lb');syncSelKey('le')}
+ const p=libSelected();$('libInfo').innerHTML=p?atlasInfo(p):'—';syncSelKey('lb');syncSelKey('le')}
 
 /* ═════════════ MIDI ═════════════ */
 async function midiConnect(){if(!navigator.requestMIDIAccess){say('WEB MIDI IS NOT AVAILABLE IN THIS BROWSER');return}
