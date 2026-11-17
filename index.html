@@ -294,7 +294,7 @@ const ESEL={wave1:['OSC 1 WAVE',['sine','triangle','sawtooth','square']],wave2:[
 const SELLBL={sine:'SINE',triangle:'TRI',sawtooth:'SAW',square:'SQR',lowpass:'LP',highpass:'HP',bandpass:'BP',notch:'NOTCH',comb:'COMB',filter:'FILTER',pitch:'PITCH',amplitude:'AMP',off:'OFF',on:'ON'};
 
 let state={banks:defaultBanks(),steps:Array.from({length:16},(_,i)=>i%4===0),master:55,tempo:120,lfoRate:2,lfoDepth:20,lfoDest:'filter',lfoWave:'sine',drive:0,delayMix:12,delayTime:.25,feedback:12,gate:55,root:48,sendLevel:8,cables:[]};
-const ui={scene:0,scenePick:0,zoom:1,focus:[0,0],editBank:0,editStep:0,lane:'bank',octoBank:0,octave:3,recipe:0,facMode:'recipe',discMode:'guided',novelty:35,libT:[0,0],libChosen:{source:'factory',index:0},saved:[],sug:null,vars:[],drag:null,colorIdx:0,lights:1,cableOpacity:.8,tension:.5,
+const ui={octoFollow:true,oscH:[],scene:0,scenePick:0,zoom:1,focus:[0,0],editBank:0,editStep:0,lane:'bank',octoBank:0,octave:3,recipe:0,facMode:'recipe',discMode:'guided',novelty:35,libT:[0,0],libChosen:{source:'factory',index:0},saved:[],sug:null,vars:[],drag:null,colorIdx:0,lights:1,cableOpacity:.8,tension:.5,
  hits:Array.from({length:8},()=>Array(8).fill(0)),act:[],vu:[],vuM:[],vuN:{},vuL:Array(9).fill(0),octo:[],scope:null,lfoLed:null,idleDrawn:false,lfoKey:null,tremKey:null,playCells:[],cells:[],midi:null,midiHit:0};
 
 const isOut=id=>id==='lfo'||id.startsWith('bo:');
@@ -816,7 +816,7 @@ function makeAudio(){
   const an=ctx.createAnalyser();an.fftSize=256;trim.connect(an);return{input,filter,effect,trem,amp,pan,trim,an}});
  bankAnalysers=busNodes.map(d=>d.an);
  slotInputs=busNodes.map(d=>Array.from({length:8},()=>{const g=ctx.createGain();g.connect(d.input);return g}));
- slotAnalysers=slotInputs.map(row=>row.map(g=>{const a=ctx.createAnalyser();a.fftSize=512;g.connect(a);return a}));
+ slotAnalysers=slotInputs.map(row=>row.map(g=>{const a=ctx.createAnalyser();a.fftSize=2048;g.connect(a);return a}));
  masterAnalyser=ctx.createAnalyser();masterAnalyser.fftSize=2048;master.connect(masterAnalyser);
  lfo=ctx.createOscillator();lfoGain=ctx.createGain();lfo.connect(lfoGain);lfo.start();
  ui.lfoKey=null;ui.tremKey=null;ui.idleDrawn=false;
@@ -968,7 +968,7 @@ function rowControl(){return `<div class="row">
   <div class="lw" style="width:100%">${sel('ms:lfoWave','waveform')}WAVE</div><div class="lw" style="width:100%">${sel('ms:lfoDest','destination')}DESTINATION</div>
   <div class="lcd multi" id="lfoInfo" style="--lcdc:#2cc8e7;font-size:8px"></div>${jack('lfo','OUT',true,'Global LFO output — patch into bank MOD inputs')}`,{id:'modLfo',sub:'GLOBAL MODULATION'})}
  ${mod(20,'dark','SCOPE',`<canvas class="scr-c" id="scopeM" style="height:262px" aria-label="Master oscilloscope"></canvas><div class="rowc"><span class="lbl">MASTER BUS · TRIGGERED</span><span class="lbl">1024 SMP</span></div>`,{id:'modScope',sub:'MASTER OSCILLOSCOPE'})}
- ${mod(28,'navy','OCTOSCOPE',`<div class="octb" id="octB"></div><div class="oct">${Array.from({length:8},(_,i)=>`<div class="lw"><canvas class="scr-c" id="oct${i}" aria-label="Engine ${i+1} oscilloscope"></canvas><span>ENGINE ${pad(i+1)}</span></div>`).join('')}</div><span class="lbl" id="octLbl"></span>`,{id:'modOcto',sub:'8 ENGINE SCOPES · SELECTED BANK'})}
+ ${mod(28,'navy','OCTOSCOPE',`<div class="octb" id="octB"></div><div class="oct">${Array.from({length:8},(_,i)=>`<div class="lw"><canvas class="scr-c" id="oct${i}" aria-label="Engine ${i+1} oscilloscope"></canvas><span id="octL${i}">ENGINE ${pad(i+1)}</span></div>`).join('')}</div><span class="lbl" id="octLbl"></span>`,{id:'modOcto',sub:'8 ENGINE SCOPES · SELECTED BANK'})}
  ${mod(10,'light','ROUTER',`${knob('m:sendLevel','l','red','SEND')}<div class="lcd list multi" id="routes" style="height:150px;--lcdc:#ff6a5c"></div><button type="button" class="pb" data-act="clearRoutes">CLEAR SENDS</button><p class="tiny">Patch bank OUT ▸ a later bank IN</p>`,{id:'modRouter',sub:'SYNTHESIS MATRIX'})}
  ${mod(10,'black','SCENES',`<div class="lcd list" id="scnList" style="height:160px;--lcdc:#ff5fd2"></div><div class="lcd multi" id="scnInfo" style="height:66px;font-size:8px;--lcdc:#ff5fd2"></div>
   <button type="button" class="pb acc" data-act="scnLoad">▶ LOAD SCENE</button><div class="rowc"><button type="button" class="pb" data-act="scnPrev" aria-label="Previous scene">◂</button><button type="button" class="pb" data-act="scnNext" aria-label="Next scene">▸</button></div>`,{id:'modScenes',sub:'FULL-RACK PRESETS'})}
@@ -1022,7 +1022,7 @@ function syncEl(el){
 const syncWithin=root=>root.querySelectorAll('[data-k],[data-ro],[data-s]').forEach(syncEl);
 const syncKey=key=>rack.querySelectorAll(`[data-k="${key}"],[data-ro="${key}"]`).forEach(syncEl);
 const syncSelKey=key=>rack.querySelectorAll(`[data-s="${key}"]`).forEach(syncEl);
-function refreshEngine(b,s){const el=$(`eng-${b}-${s}`);if(!el)return;const tmp=document.createElement('div');tmp.innerHTML=engineHTML(b,s);const n=tmp.firstElementChild;el.replaceWith(n);syncWithin(n);ui.act[b][s]=$(`act-${b}-${s}`)}
+function refreshEngine(b,s){const el=$(`eng-${b}-${s}`);if(!el)return;const tmp=document.createElement('div');tmp.innerHTML=engineHTML(b,s);const n=tmp.firstElementChild;el.replaceWith(n);syncWithin(n);ui.act[b][s]=$(`act-${b}-${s}`);if(b===ui.octoBank)renderOctoBtns()}
 function say(msg){const s=$('status');if(s)s.textContent=msg}
 function info(){const on=state.banks.reduce((n,b)=>n+b.slots.filter(s=>s.on).length,0);$('mbInfo').textContent=`${state.tempo} BPM · ${ctx?ctx.sampleRate+' Hz':'AUDIO OFF'} · ${on}/64 ENGINES · ${state.cables.length} CABLE${state.cables.length===1?'':'S'}${seqTimer?' · SEQ ▶':''}`}
 function leds(){const run=!!ctx&&ctx.state==='running';rack.querySelectorAll('.pwrLed').forEach(l=>l.classList.toggle('on',run));rack.querySelectorAll('.runLed').forEach(l=>l.classList.toggle('on',!!seqTimer));info()}
@@ -1044,7 +1044,7 @@ function renderEditor(){const[b,s]=ui.focus,sl=state.banks[b].slots[s],host=$('e
  $('modEditor').style.setProperty('--bc',BANKC[b]);syncWithin(host)}
 function setFocus(b,s,scroll=true){const[ob,os]=ui.focus;ui.focus=[b,s];ui.libT=[b,s];
  for(const[x,y,on]of[[ob,os,false],[b,s,true]]){const el=$(`eng-${x}-${y}`);if(!el)continue;el.classList.toggle('focused',on);el.querySelector('[data-act="focus"] .led')?.classList.toggle('on',on)}
- renderEditor();syncSelKey('lb');syncSelKey('le');
+ renderEditor();syncSelKey('lb');syncSelKey('le');if(ui.octoFollow&&ui.octoBank!==b){ui.octoBank=b}renderOctoBtns();
  if(scroll){const ed=$('modEditor'),r=ed.getBoundingClientRect(),v=viewport.getBoundingClientRect();if(r.bottom<v.top+60||r.top>v.bottom-60||r.right<v.left+60||r.left>v.right-60)ed.scrollIntoView({behavior:'smooth',block:'nearest',inline:'nearest'})}
  say(`EDITING B${b+1}·E${s+1} · ${TYPES[state.banks[b].slots[s].type].toUpperCase()}`)}
 
@@ -1144,17 +1144,17 @@ function locate(id){const el=$(id);if(!el)return;el.scrollIntoView({behavior:'sm
 const ACT={
  power:async()=>{await ensure()},stop:()=>panic(),kill:()=>killAudio(),run:()=>toggleSeq(),
  export:()=>{download({format:'continuum-synth-p01',state},'Continuum_Synth_8x8_Patch.json');say('RACK PATCH SAVED')},import:()=>$('file').click(),
- slotOn:a=>{const[b,s]=pair(a),sl=state.banks[b].slots[s];sl.on=!sl.on;rack.querySelectorAll(`[data-act="slotOn"][data-arg="${a}"] .led`).forEach(l=>l.classList.toggle('on',sl.on));info()},
+ slotOn:a=>{const[b,s]=pair(a),sl=state.banks[b].slots[s];sl.on=!sl.on;rack.querySelectorAll(`[data-act="slotOn"][data-arg="${a}"] .led`).forEach(l=>l.classList.toggle('on',sl.on));info();renderOctoBtns()},
  audition:async a=>{if(await ensure())trigger(48,null,.42,pair(a))},
  focus:a=>setFocus(...pair(a)),
  playBank:async a=>{if(await ensure())trigger(48,null,.42,[+a])},
  mute:a=>{const p=state.bankPatterns[+a];p.mute=!p.mute;rack.querySelectorAll(`[data-act="mute"][data-arg="${a}"] .led`).forEach(l=>l.classList.toggle('on',p.mute))},
- seqBank:a=>{ui.editBank=+a;ui.editStep=Math.min(ui.editStep,pat().length-1);ui.lane='bank';ui.octoBank=+a;renderSeqGrid();renderOctoBtns()},
+ seqBank:a=>{ui.editBank=+a;ui.editStep=Math.min(ui.editStep,pat().length-1);ui.lane='bank';if(ui.octoFollow)ui.octoBank=+a;renderSeqGrid();renderOctoBtns()},
  seqTest:()=>{const p=pat();p.steps.forEach((st,i)=>{st.on=i<p.length&&i%4!==3;st.pitch=[0,0,7,12,5,3,7,-5][i%8];st.velocity=[110,78,94,70][i%4];st.gate=55;st.filter=[30,60,80,45][i%4]});renderSeqGrid();say(`TEST PATTERN LOADED · BANK ${ui.editBank+1}`)},
  seqClear:()=>{if(ui.lane==='bank')pat().steps.forEach(st=>st.on=false);else state.engineSequence[ui.editBank].masks[+ui.lane].fill(false);renderSeqGrid();say(`BANK ${ui.editBank+1} ${ui.lane==='bank'?'PATTERN':'ENGINE '+(+ui.lane+1)+' MASK'} CLEARED`)},
  target:a=>{const t=state.engineSequence[ui.editBank].targets;t[+a]=!t[+a];renderTargets()},
  tAll:()=>{state.engineSequence[ui.editBank].targets.fill(true);renderTargets()},tNone:()=>{state.engineSequence[ui.editBank].targets.fill(false);renderTargets()},
- octo:a=>{ui.octoBank=+a;renderOctoBtns()},
+ octo:a=>{ui.octoBank=+a;ui.octoFollow=false;renderOctoBtns()},octoFollow:()=>{ui.octoFollow=!ui.octoFollow;if(ui.octoFollow)ui.octoBank=ui.focus[0];renderOctoBtns()},
  clearRoutes:()=>{state.cables=state.cables.filter(c=>c.from==='lfo');cablesChanged();say('AUDIO SENDS CLEARED · DIRECT PATHS RETAINED')},
  midi:()=>midiConnect(),
  edPrev:()=>{const i=(ui.focus[0]*8+ui.focus[1]+63)%64;setFocus(i>>3,i&7,false)},edNext:()=>{const i=(ui.focus[0]*8+ui.focus[1]+1)%64;setFocus(i>>3,i&7,false)},
@@ -1181,7 +1181,9 @@ function renderScenes(){const l=$('scnList');if(!l)return;l.innerHTML=SCENES.map
 function loadScene(i){const sc=SCENES[i];if(!sc)return;applyScene(sc);ui.scenePick=i;ui.editBank=0;ui.editStep=0;ui.lane='bank';ui.focus=[0,0];ui.libT=[0,0];ui.lfoKey=null;ui.tremKey=null;buildRack();updateAudio();applyMatrix();say(`SCENE ▸ ${sc.name.toUpperCase()} · ${sc.tag}`)}
 
 /* ═════════════ octoscope buttons ═════════════ */
-function renderOctoBtns(){const el=$('octB');if(!el)return;el.innerHTML=BANKC.map((c,i)=>`<div class="lw">${ledBtn('octo',i,ui.octoBank===i,c,`Show bank ${i+1} engines`)}B${i+1}</div>`).join('');$('octLbl').textContent=`BANK ${pad(ui.octoBank+1)} · POST-ENGINE · PRE-BUS`;ui.idleDrawn=false}
+function renderOctoBtns(){const el=$('octB');if(!el)return;el.innerHTML=BANKC.map((c,i)=>`<div class="lw">${ledBtn('octo',i,ui.octoBank===i,c,`Show bank ${i+1} engines`)}B${i+1}</div>`).join('')+`<div class="lw" style="margin-left:6px">${ledBtn('octoFollow','',ui.octoFollow,'#ffffff','Follow the bank you are editing')}FOLLOW</div>`;
+ const bk=state.banks[ui.octoBank];$('octLbl').textContent=`BANK ${pad(ui.octoBank+1)} · ${bk.slots.filter(s=>s.on).length}/8 ON · ${ui.octoFollow?'FOLLOWING EDITS':'LOCKED'}`;
+ bk.slots.forEach((sl,i)=>{const l=$('octL'+i);if(l){l.textContent=`E${pad(i+1)} · ${sl.on?SHORT[sl.type]:'OFF'}`;l.style.opacity=sl.on?1:.45}});ui.oscH=[];ui.idleDrawn=false}
 
 /* ═════════════ P14 factory library + mutator ═════════════ */
 const FAMILIES=[['Warm & Organic',['Velvet Bloom','Golden Drift','Soft Ember','Living Breath'],[1,6],38,48,12,'play'],['Ambient & Evolving',['Celestial Tide','Infinite Glass','Aurora Field','Slow Horizon'],[4,6],59,39,25,'drone'],['Analogue & Harmonic',['Copper Pulse','Satin Lead','Vintage Current','Harmonic Sun'],[0,1],54,43,10,'arp'],['Bell & Resonant',['Crystal Rain','Bronze Bells','Singing Stone','Silver Chimes'],[2,5],76,42,25,'arp'],['Bass & Subharmonic',['Deep Current','Subterranean','Velvet Pressure','Low Orbit'],[1,6],23,44,5,'play'],['Rhythmic & Pulsating',['Heartbeat Engine','Liquid Motion','Amber Sequence','Kinetic Bloom'],[3,0],63,40,15,'arp'],['Natural & Textural',['Forest Whisper','Rain Resonance','Organic Pulse','Mosslight'],[5,6],49,36,20,'drone'],['Experimental & Expressive',['Harmonic Creature','Fractal Bloom','Liquid Alloy','Emergent Voice'],[7,3],64,32,12,'play']];
@@ -1248,9 +1250,16 @@ function trace(c,d,w,h,gain){let st=0;const half=d.length>>1;for(let i=1;i<half;
 function drawScopes(active){
  const g=ui.scope&&prep(ui.scope);if(g){const{c,w,h}=g;c.fillStyle='#030303';c.fillRect(0,0,w,h);c.strokeStyle='#1a1a1a';c.lineWidth=1;c.beginPath();for(let i=1;i<10;i++){c.moveTo(i*w/10,0);c.lineTo(i*w/10,h)}for(let i=1;i<8;i++){c.moveTo(0,i*h/8);c.lineTo(w,i*h/8)}c.stroke();c.strokeStyle='#2c2c2c';c.beginPath();c.moveTo(0,h/2);c.lineTo(w,h/2);c.stroke();
   c.strokeStyle='#ffb437';c.lineWidth=1.6;c.shadowColor='#ffb437';c.shadowBlur=7;if(active&&masterAnalyser){const d=masterAnalyser._b||(masterAnalyser._b=new Float32Array(masterAnalyser.fftSize));masterAnalyser.getFloatTimeDomainData(d);trace(c,d,w,h,1.1)}else{c.beginPath();c.moveTo(0,h/2);c.lineTo(w,h/2);c.stroke()}c.shadowBlur=0}
- const row=active?slotAnalysers[ui.octoBank]:null,col=BANKC[ui.octoBank];
- ui.octo.forEach((cv,i)=>{const g=cv&&prep(cv);if(!g)return;const{c,w,h}=g;c.fillStyle='#02050b';c.fillRect(0,0,w,h);c.strokeStyle='#15213b';c.lineWidth=1;c.beginPath();for(let x=1;x<4;x++){c.moveTo(x*w/4,0);c.lineTo(x*w/4,h)}c.moveTo(0,h/2);c.lineTo(w,h/2);c.stroke();c.strokeStyle=col;c.lineWidth=1.3;
-  if(row){const a=row[i],d=a._b||(a._b=new Float32Array(a.fftSize));a.getFloatTimeDomainData(d);trace(c,d,w,h,3)}else{c.beginPath();c.moveTo(0,h/2);c.lineTo(w,h/2);c.stroke()}})}
+ const row=active?slotAnalysers[ui.octoBank]:null,col=BANKC[ui.octoBank],now=performance.now(),bk=state.banks[ui.octoBank];
+ ui.octo.forEach((cv,i)=>{const g=cv&&prep(cv);if(!g)return;const{c,w,h}=g;c.fillStyle='#02050b';c.fillRect(0,0,w,h);c.strokeStyle='#15213b';c.lineWidth=1;c.beginPath();for(let x=1;x<4;x++){c.moveTo(x*w/4,0);c.lineTo(x*w/4,h)}c.moveTo(0,h/2);c.lineTo(w,h/2);c.stroke();
+  const H=ui.oscH[i]||(ui.oscH[i]={buf:null,t:-1e9,pk:0});
+  if(row){const a=row[i],d=a._b||(a._b=new Float32Array(a.fftSize));a.getFloatTimeDomainData(d);let pk=0;for(let j=0;j<d.length;j++){const v=Math.abs(d[j]);if(v>pk)pk=v}
+   if(pk>.003){if(!H.buf||H.buf.length!==d.length)H.buf=new Float32Array(d.length);H.buf.set(d);H.t=now;H.pk=pk}}
+  const age=now-H.t,alpha=H.buf?(age<80?1:Math.max(0,1-(age-80)/900)):0;
+  c.strokeStyle=col;c.lineWidth=1.4;
+  if(alpha>.02){c.globalAlpha=.2+.8*alpha;c.shadowColor=col;c.shadowBlur=5*alpha;trace(c,H.buf,w,h,.42/Math.max(H.pk,.015));c.shadowBlur=0;c.globalAlpha=1}
+  else{c.globalAlpha=.5;c.beginPath();c.moveTo(0,h/2);c.lineTo(w,h/2);c.stroke();c.globalAlpha=1}
+  if(!bk.slots[i].on){c.fillStyle='rgba(2,5,11,.55)';c.fillRect(0,0,w,h);c.fillStyle='#5b6a8c';c.font='700 9px ui-monospace,monospace';c.textAlign='center';c.fillText('ENGINE OFF',w/2,h/2-6)}})}
 function lfoValue(ph){switch(state.lfoWave){case 'triangle':return 1-4*Math.abs(ph-.5);case 'square':return ph<.5?1:-1;case 'sawtooth':return 2*ph-1;default:return Math.sin(ph*Math.PI*2)}}
 function frame(now){requestAnimationFrame(frame);
  for(let b=0;b<8;b++)for(let s=0;s<8;s++){const h=ui.hits[b][s];let l=h&&now>=h?Math.exp(-(now-h)/170):0;if(l<.02)l=0;const el=ui.act[b]?.[s];if(el&&Math.abs((el._l||0)-l)>.015){el._l=l;el.style.setProperty('--l',l.toFixed(3))}}
